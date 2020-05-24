@@ -1,0 +1,17 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Callback</title>
+</head>
+<body>
+<script src="oidc-client.js"></script>
+<script>
+    new Oidc.UserManager({response_mode:"query"}).signinRedirectCallback().then(function() {
+        window.location = "index.html";
+    }).catch(function(e) {
+        console.error(e);
+    });
+</script>
+</body>
+</html>
