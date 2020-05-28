@@ -1,11 +1,15 @@
 ﻿using System.Linq;
 using System.Reflection;
+using IdentityServer.Data;
+using IdentityServer.Models;
 using IdentityServer4;
 using IdentityServer4.EntityFramework.DbContexts;
 using IdentityServer4.EntityFramework.Mappers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
@@ -15,10 +19,12 @@ namespace IdentityServer
     public class Startup
     {
         public IWebHostEnvironment Environment { get; }
+        public IConfiguration Configuration { get; }
 
-        public Startup(IWebHostEnvironment environment)
+        public Startup(IWebHostEnvironment environment, IConfiguration configuration)
         {
             Environment = environment;
+            Configuration = configuration;
         }
 
         public void ConfigureServices(IServiceCollection services)
@@ -61,13 +67,31 @@ namespace IdentityServer
             });
 
             var migrationsAssembly = typeof(Startup).GetTypeInfo().Assembly.GetName().Name;
-            const string connectionString = @"Data Source=.\DB\IS4.db;";
+            var connectionString = Configuration.GetConnectionString("IS4"); 
+            var connectionStringUsers = Configuration.GetConnectionString("IS4Users"); 
 
+            services.AddDbContext<ApplicationDbContext>(options =>
+                options.UseSqlite(connectionStringUsers));
+
+            services.AddIdentity<ApplicationUser, IdentityRole>()
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                .AddDefaultTokenProviders();
+            
             // uncomment, if you want to add an MVC-based UI
             services.AddControllersWithViews();
-            var builder = services.AddIdentityServer()
-                .AddTestUsers(TestUsers.Users)
-                .AddConfigurationStore(options =>
+            var builder = services.AddIdentityServer(options =>
+                {
+                    options.Events.RaiseErrorEvents = true;
+                    options.Events.RaiseInformationEvents = true;
+                    options.Events.RaiseFailureEvents = true;
+                    options.Events.RaiseSuccessEvents = true;
+                })
+                //.AddInMemoryIdentityResources(Config.Ids)
+                //.AddInMemoryApiResources(Config.Apis)
+                //.AddInMemoryClients(Config.Clients)
+                //.AddTestUsers(TestUsers.Users)
+                .AddAspNetIdentity<ApplicationUser>() // Users
+                .AddConfigurationStore(options =>            // Configuration
                 {
                     options.ConfigureDbContext = optionsBuilder =>
                     {
@@ -78,7 +102,7 @@ namespace IdentityServer
                             });
                     };
                 })
-                .AddOperationalStore(options =>
+                .AddOperationalStore(options =>            // PersistedGrants
                 {
                     options.ConfigureDbContext = optionsBuilder =>
                     {
@@ -119,6 +143,7 @@ namespace IdentityServer
         {
             using (var serviceScope = app.ApplicationServices.GetService<IServiceScopeFactory>().CreateScope())
             {
+                serviceScope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.Migrate();
                 serviceScope.ServiceProvider.GetRequiredService<PersistedGrantDbContext>().Database.Migrate();
 
                 var context = serviceScope.ServiceProvider.GetRequiredService<ConfigurationDbContext>();
